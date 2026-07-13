@@ -1,12 +1,13 @@
-import React, {useState, useRef} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
-  View,
-  Image,
+  ActivityIndicator,
   Alert,
+  AppState,
+  Image,
   Linking,
   SafeAreaView,
   TouchableOpacity,
-  ActivityIndicator,
+  View,
 } from 'react-native';
 import {WebView} from 'react-native-webview';
 
@@ -20,9 +21,36 @@ const ProductScreen = ({route}) => {
   const [checkNineUrl, setCheckNineUrl] = useState();
 
   const [isLoading, setIsLoading] = useState(true);
-  const [skipFirstLoadEnd, setSkipFirstLoadEnd] = useState(true);
+
+    const externalAppOpenedRef = useRef(false);
+    const loadingTimeoutRef = useRef(null);
 
   console.log('My product Url in WebView ==>', product);
+
+    useEffect(() => {
+        const subscription = AppState.addEventListener('change', nextState => {
+            console.log('APP STATE ==>', nextState);
+
+            if (nextState === 'active' && externalAppOpenedRef.current) {
+                externalAppOpenedRef.current = false;
+
+                if (loadingTimeoutRef.current) {
+                    clearTimeout(loadingTimeoutRef.current);
+                    loadingTimeoutRef.current = null;
+                }
+
+                setIsLoading(false);
+            }
+        });
+
+        return () => {
+            subscription.remove();
+
+            if (loadingTimeoutRef.current) {
+                clearTimeout(loadingTimeoutRef.current);
+            }
+        };
+    }, []);
 
   /**
    * URL-схеми, які дозволено відкривати всередині WebView.
@@ -69,25 +97,29 @@ const ProductScreen = ({route}) => {
    * навіть якщо застосунок встановлений. Тому відкриваємо напряму
    * через Linking.openURL, а fallback показуємо тільки в catch.
    */
-  const openExternalUrl = async url => {
-    if (!url) {
-      return;
-    }
+    const openExternalUrl = async url => {
+        if (!url) {
+            return;
+        }
 
-    setIsLoading(false);
+        setIsLoading(false);
+        externalAppOpenedRef.current = true;
 
-    try {
-      console.log('EXTERNAL URL ==>', url);
-      await Linking.openURL(url);
-    } catch (error) {
-      console.warn('Unable to open external URL:', url, error);
+        try {
+            console.log('EXTERNAL URL ==>', url);
 
-      Alert.alert(
-        'App not installed',
-        'There is no application installed to open this link.',
-      );
-    }
-  };
+            await Linking.openURL(url);
+        } catch (error) {
+            externalAppOpenedRef.current = false;
+
+            console.warn('Unable to open external URL:', url, error);
+
+            Alert.alert(
+                'App not installed',
+                'There is no application installed to open this link.',
+            );
+        }
+    };
 
   /**
    * FIX: окремі provider/bank URL треба перетворювати
@@ -337,18 +369,36 @@ const ProductScreen = ({route}) => {
     refWebview.current?.reload();
   };
 
-  const handleLoadingStart = () => {
-    setIsLoading(true);
-  };
+    const handleLoadingStart = syntheticEvent => {
+        const url = syntheticEvent?.nativeEvent?.url || '';
 
-  const handleLoadingEnd = () => {
-    if (skipFirstLoadEnd) {
-      setSkipFirstLoadEnd(false);
-      return;
-    }
+        console.log('LOAD START ==>', url);
 
-    setIsLoading(false);
-  };
+        if (externalAppOpenedRef.current) {
+            setIsLoading(false);
+            return;
+        }
+
+        setIsLoading(true);
+
+        if (loadingTimeoutRef.current) {
+            clearTimeout(loadingTimeoutRef.current);
+        }
+
+        loadingTimeoutRef.current = setTimeout(() => {
+            console.warn('WebView loading timeout ==>', url);
+            setIsLoading(false);
+        }, 10000);
+    };
+
+    const handleLoadingEnd = () => {
+        if (loadingTimeoutRef.current) {
+            clearTimeout(loadingTimeoutRef.current);
+            loadingTimeoutRef.current = null;
+        }
+
+        setIsLoading(false);
+    };
 
   const LoadingIndicatorView = () => (
     <View
@@ -384,7 +434,7 @@ const ProductScreen = ({route}) => {
   return (
       <SafeAreaView style={{ flex: 1, backgroundColor: '#191d24' }}>
           
-          {isLoading && <LoadingIndicatorView />}
+        {isLoading && <LoadingIndicatorView />}
 
           
       <WebView
@@ -407,8 +457,6 @@ const ProductScreen = ({route}) => {
         mediaPlaybackRequiresUserAction={false}
         allowFileAccess
         javaScriptCanOpenWindowsAutomatically
-        startInLoadingState
-        renderLoading={LoadingIndicatorView}
         style={{flex: 1}}
       />
 
