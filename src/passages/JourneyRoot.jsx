@@ -24,7 +24,7 @@ import { Alert, AppState } from 'react-native';
 export const JourneyRoot = ({initialUrl,
   initialId,
   oneSignKkkk,}) => {
-  const [route, setRoute] = useState(true);
+  const [route, setRoute] = useState(false);
   console.log('route===>', route);
   const [isLoading, setIsLoading] = useState(false);
   const [responseToPushPermition, setResponseToPushPermition] = useState(false);
