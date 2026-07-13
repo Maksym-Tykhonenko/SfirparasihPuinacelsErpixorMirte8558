@@ -1,0 +1,52 @@
+workflows:
+  ios-workflow:
+    name: 'Splash Places - Explore Time'
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: SplashPlacesApiKeyNew
+    environment:
+      xcode: '26.0'
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.fraspir.pincalre.erixopl.app
+      vars:
+        BUNDLE_ID: com.fraspir.pincalre.erixopl.app
+        XCODE_WORKSPACE: SfirparasihPuinacelsErpixorMirte.xcworkspace
+        XCODE_SCHEME: SfirparasihPuinacelsErpixorMirte
+        APP_STORE_APPLE_ID: 6771368495
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          npm install
+      - name: Clean Pods
+        script: |
+          cd ios
+          rm -rf Pods Podfile.lock
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios && pod install
+      - name: Set up provisioning profile settings on  Xcode project
+        script: |
+          cd ios
+          xcode-project use-profiles
+      - name: Increment build number
+        script: |
+          cd ios
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID")
+          agvtool new-version -all $(($LATEST_BUILD_NUMBER + 1))
+      - name: Build IPA for distribution
+        script: |
+          xcode-project build-ipa \
+            --workspace "$CM_BUILD_DIR/ios/$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData//Build//*.app
+      - $HOME/Library/Developer/Xcode/DerivedData//Build//*.dSYM
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_app_store: true
+        copyright: 'Maria Weber'
